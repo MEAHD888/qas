@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مترجم لغة الإشارة الذكي - Google AI</title>
+    <!-- استدعاء مكتبات جوجل الذكية للتعرف على اليدين مباشرة في المتصفح -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 700px;
+            margin: auto;
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: auto;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid #38bdf8;
+        }
+        video {
+            width: 100%;
+            display: block;
+            transform: scaleX(-1); /* انعكاس مرآة للكاميرا */
+        }
+        .output-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: #334155;
+            border-radius: 8px;
+            font-size: 26px;
+            font-weight: bold;
+            color: #38bdf8;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>مترجم لغة الإشارة الذكي (أهلاً، بحبك، وداعاً)</h2>
+        <div class="video-container">
+            <video id="webcam" autoplay playsinline></video>
+        </div>
+        <div class="output-box" id="output">جاري تحميل نموذج الذكاء الاصطناعي...</div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('webcam');
+        const outputElement = document.getElementById('output');
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                // استخراج إحداثيات أطراف الأصابع (Tips) ومفاصل القواعد (Bases)
+                // الأرقام مأخوذة من خريطة ميديابايب لليد:
+                // الإبهام: 4 (طرف), السبابة: 8 (طرف), الوسطى: 12 (طرف), البنصر: 16 (طرف), الخنصر: 20 (طرف)
+                
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                const middleTip = landmarks[12];
+                const ringTip = landmarks[16];
+                const pinkyTip = landmarks[20];
+
+                const wrist = landmarks[0];
+
+                // فحص هل الإصبع مفرود (مرتفع للأعلى مقارنة بقاعدة المعصم أو المفصل)
+                // في إحداثيات الشاشة، القيمة Y تقل كلما صعدنا لأعلى
+                let isThumbOpen = thumbTip.y < landmarks[2].y;
+                let isIndexOpen = indexTip.y < landmarks[6].y;
+                let isMiddleOpen = middleTip.y < landmarks[10].y;
+                let isRingOpen = ringTip.y < landmarks[14].y;
+                let isPinkyOpen = pinkyTip.y < landmarks[18].y;
+
+                let translatedText = "جاري التعرف على الإشارة...";
+
+                // 1. إشارة "أهلاً" (Hello): كل الأصابع مفرودة ومفتوحة
+                if (isIndexOpen && isMiddleOpen && isRingOpen && isPinkyOpen) {
+                    translatedText = "👋 أهلاً (Hello)";
+                }
+                // 2. إشارة "بحبك" (I Love You): الإبهام + السبابة + الخنصر مفرودون، والوسطى + البنصر مطويان
+                else if (isThumbOpen && isIndexOpen && isPinkyOpen && !isMiddleOpen && !isRingOpen) {
+                    translatedText = "❤️ بحبك (I Love You)";
+                }
+                // 3. إشارة "وداعاً" أو التلويح بكف مفتوح أو حركة أخرى (مثلاً السبابة والوسطى فقط أو إغلاق جزئي)
+                // سنبسط إشارة وداعاً هنا بأن تكون قبضة مغلقة تماماً أو حركة أخرى للتمييز
+                else if (!isIndexOpen && !isMiddleOpen && !isRingOpen && !isPinkyOpen) {
+                    translatedText = "👋 وداعاً (Goodbye)";
+                } else {
+                    translatedText = "حاول ضبط إشارتك (أهلاً / بحبك / وداعاً)";
+                }
+
+                outputElement.innerText = translatedText;
+
+            } else {
+                outputElement.innerText = "الرجاء إظهار اليد أمام الكاميرا...";
+            }
+        }
+
+        // إعداد نموذج اليد من جوجل
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+
+        // تشغيل كاميرا المتصفح
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 640,
+            height: 480
+        });
+
+        camera.start().then(() => {
+            outputElement.innerText = "الكاميرا تعمل، جرب إشارة (أهلاً) أو (بحبك)!";
+        }).catch(err => {
+            outputElement.innerText = "خطأ في تشغيل الكاميرا: " + err;
+        });
+    </script>
+
+</body>
+</html>
